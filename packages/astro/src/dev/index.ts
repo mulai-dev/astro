@@ -1,5 +1,6 @@
 import type { AstroConfig, DevOptions } from '../@types/astro';
 
+import chokidar from 'chokidar';
 import fs from 'fs';
 import http from 'http';
 import getPort from 'get-port';
@@ -40,8 +41,12 @@ export default async function dev(config: AstroConfig, options: DevOptions): Pro
       }),
     ],
     publicDir: fileURLToPath(config.public),
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+    },
     root: fileURLToPath(config.projectRoot),
     server: {
+      fs: { strict: false },
       force: true,
       host: hostname,
       port: VITE_CLIENT_PORT,
@@ -55,6 +60,15 @@ export default async function dev(config: AstroConfig, options: DevOptions): Pro
   const viteServer = await vite.createServer(viteConfig);
 
   let urlMap = await buildURLMap(config.pages);
+
+  // rebuild urlMap on local change
+  const watcher = chokidar.watch(`${fileURLToPath(config.projectRoot)}/**/*`);
+  watcher.on('add', async () => {
+    urlMap = await buildURLMap(config.pages);
+  });
+  watcher.on('unlink', async () => {
+    urlMap = await buildURLMap(config.pages);
+  });
 
   /** Primary router */
   async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -101,7 +115,7 @@ export default async function dev(config: AstroConfig, options: DevOptions): Pro
 
       // static pages
       if (urlMap.staticPages.has(reqURL)) {
-        const html = await ssr({ logging: options.logging, reqURL, origin, urlMap, viteServer });
+        const html = await ssr({ config, logging: options.logging, mode: 'development', reqURL, origin, urlMap, viteServer });
         res.writeHead(200, {
           'Content-Type': mime.getType('.html') as string,
         });
@@ -114,7 +128,7 @@ export default async function dev(config: AstroConfig, options: DevOptions): Pro
       else {
         for (const [k] of urlMap.collections.entries()) {
           if (reqURL.startsWith(k)) {
-            const html = await ssr({ logging: options.logging, reqURL, origin, urlMap, viteServer });
+            const html = await ssr({ config, logging: options.logging, mode: 'development', reqURL, origin, urlMap, viteServer });
             res.writeHead(200, {
               'Content-Type': mime.getType('.html') as string,
             });
@@ -123,17 +137,6 @@ export default async function dev(config: AstroConfig, options: DevOptions): Pro
             break;
           }
         }
-      }
-
-      // /_astro
-      if (reqURL.startsWith('/_astro/')) {
-        return proxyToVite(reqURL.replace(/^\/_astro\//, '/'));
-      }
-
-      // /_astro_frontend
-      if (reqURL.startsWith('/_astro_frontend/')) {
-        const rootDir = new URL('../frontend/', import.meta.url);
-        return proxyToFS(reqURL.replace(/^\/_astro_frontend\//, ''), rootDir);
       }
 
       // assets, and everything else:

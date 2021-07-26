@@ -17,6 +17,8 @@
     "./snowpack-plugin-jsx": "./snowpack-plugin-jsx.cjs",
     "./components": "./components/index.js",
     "./components/*": "./components/*",
+    "./frontend/*": "./dist/frontend/*",
+    "./frontend/hydrate/*": "./dist/frontend/hydrate/*",
     "./runtime/svelte": "./dist/frontend/runtime/svelte.js",
     "./internal/*": "./dist/internal/*",
     "./dist/internal/*": "./dist/internal/*"
